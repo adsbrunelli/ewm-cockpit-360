@@ -30,3 +30,7 @@
 - Acesso restrito por warehouse quando aplicável.
 - Ações administrativas separadas de ações operacionais.
 - Auditoria não pode ser alterada por usuário operacional.
+
+## Validação final
+
+Todos os critérios acima devem ser verificados e aprovados antes de qualquer transporte para produção. A validação é de responsabilidade conjunta do arquiteto técnico e do líder funcional do projeto.
