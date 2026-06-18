@@ -78,8 +78,8 @@ CLASS ltcl_kpi_engine IMPLEMENTATION.
 
     cl_abap_unit_assert=>assert_equals(
       act = ls_result-status_code
-      exp = 'GREEN'
-      msg = 'Desvio de 5% dentro de tolerancia 10% deve ser GREEN'
+      exp = 'OK'
+      msg = 'Desvio de 5% dentro de tolerancia 10% deve ser OK'
     ).
     cl_abap_unit_assert=>assert_equals(
       act = ls_result-deviation_pct
@@ -102,8 +102,8 @@ CLASS ltcl_kpi_engine IMPLEMENTATION.
 
     cl_abap_unit_assert=>assert_equals(
       act = ls_result-status_code
-      exp = 'RED'
-      msg = 'Desvio de 20% acima de tolerancia 10% deve ser RED'
+      exp = 'CRITICAL'
+      msg = 'Desvio de 20% acima de tolerancia 10% deve ser CRITICAL'
     ).
   ENDMETHOD.
 
@@ -121,8 +121,8 @@ CLASS ltcl_kpi_engine IMPLEMENTATION.
 
     cl_abap_unit_assert=>assert_equals(
       act = ls_result-status_code
-      exp = 'YELLOW'
-      msg = 'Desvio exatamente no limite deve ser YELLOW'
+      exp = 'WARNING'
+      msg = 'Desvio exatamente no limite deve ser WARNING'
     ).
   ENDMETHOD.
 
@@ -158,7 +158,7 @@ CLASS ltcl_kpi_engine IMPLEMENTATION.
         DATA(ls_result) = mo_cut->calculate( ls_input ).
         cl_abap_unit_assert=>assert_equals(
           act = ls_result-status_code
-          exp = 'RED'
+          exp = 'CRITICAL'
           msg = 'Actual = 0 deve resultar em RED sem DUMP'
         ).
       CATCH zcx_ewm_c360_base INTO DATA(lx).

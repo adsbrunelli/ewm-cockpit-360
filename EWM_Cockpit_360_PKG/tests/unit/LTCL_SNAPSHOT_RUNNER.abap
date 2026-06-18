@@ -36,6 +36,21 @@ CLASS ltd_log_mock_snap IMPLEMENTATION.
     mv_write_called = abap_true.
   ENDMETHOD.
 ENDCLASS.
+
+"-- Mock que levanta exceção na primeira escrita — simula falha de infra
+"-- sem contaminar código de produção com parâmetros de teste
+CLASS ltd_failing_log_mock DEFINITION.
+  PUBLIC SECTION.
+    INTERFACES zif_ewm_c360_log_writer.
+ENDCLASS.
+CLASS ltd_failing_log_mock IMPLEMENTATION.
+  METHOD zif_ewm_c360_log_writer~write.
+    RAISE EXCEPTION TYPE zcx_ewm_c360_snapshot
+      EXPORTING textid = zcx_ewm_c360_snapshot=>log_system_error.
+  ENDMETHOD.
+  METHOD zif_ewm_c360_log_writer~write_error.
+  ENDMETHOD.
+ENDCLASS.
 "----------------------------------------------------------------------
 
 CLASS ltcl_snapshot_runner IMPLEMENTATION.
@@ -75,21 +90,40 @@ CLASS ltcl_snapshot_runner IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD release_always_called_after_error.
-    "-- Mesmo com erro durante execução do snapshot, release_lock deve ser chamado
-    mo_cut->acquire_lock( iv_lgnum = 'WH01' iv_snap_type = 'DELTA' ).
+    "-- Mesmo com erro durante execução, release_lock deve ser chamado.
+    "-- Estratégia: injetar um log_writer que levanta exceção na primeira chamada
+    "-- ao invés de usar iv_force_error no código de produção (ABA-03 fix).
+    DATA(lo_failing_log) = NEW ltd_failing_log_mock( ).
+    DATA(lo_cut_error) = NEW zcl_ewm_c360_snapshot_runner( io_log = lo_failing_log ).
+
+    lo_cut_error->acquire_lock(
+      VALUE zif_ewm_c360_snapshot_runner=>ty_snap_request(
+        lgnum        = 'WH01'
+        snap_type    = 'DELTA'
+        process_type = 'INBOUND'
+      )
+    ).
 
     TRY.
-        mo_cut->run(
-          iv_lgnum     = 'WH01'
-          iv_snap_type = 'DELTA'
-          iv_force_error = abap_true  "-- parâmetro de teste para simular falha
+        lo_cut_error->run(
+          VALUE zif_ewm_c360_snapshot_runner=>ty_snap_request(
+            lgnum        = 'WH01'
+            snap_type    = 'DELTA'
+            process_type = 'INBOUND'
+          )
         ).
-      CATCH zcx_ewm_c360_base.
-        "-- Esperado
+      CATCH zcx_ewm_c360_snapshot.
+        "-- Esperado: runner levanta exceção, mas release deve ter sido chamado
     ENDTRY.
 
-    "-- Após o erro, LOCK_FLAG deve estar limpo (release foi chamado no CLEANUP/finally)
-    DATA(lv_still_locked) = mo_cut->is_locked( iv_lgnum = 'WH01' iv_snap_type = 'DELTA' ).
+    "-- Após a exceção, LOCK_FLAG deve estar limpo (CLEANUP/TRY...FINALLY no runner)
+    DATA(lv_still_locked) = lo_cut_error->is_locked(
+      VALUE zif_ewm_c360_snapshot_runner=>ty_snap_request(
+        lgnum        = 'WH01'
+        snap_type    = 'DELTA'
+        process_type = 'INBOUND'
+      )
+    ).
     cl_abap_unit_assert=>assert_false(
       act = lv_still_locked
       msg = 'LOCK_FLAG deve ser limpo mesmo apos excecao durante execucao'

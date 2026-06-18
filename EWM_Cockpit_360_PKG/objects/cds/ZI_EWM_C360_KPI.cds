@@ -38,11 +38,11 @@ define view entity ZI_EWM_C360_KPI
       Kpi.calc_timestamp as CalcTimestamp,
       Kpi.snap_ref      as SnapRef,
 
-      /* Criticality para Fiori */
+      /* Criticality para Fiori: 0=verde 2=amarelo 3=vermelho (padrão ADR-010) */
       case Kpi.status_code
-        when 'CRITICAL' then 1
+        when 'OK'       then 0
         when 'WARNING'  then 2
-        when 'OK'       then 3
+        when 'CRITICAL' then 3
         else 0
       end as StatusCriticality,
 

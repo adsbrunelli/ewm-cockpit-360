@@ -71,6 +71,63 @@ quando o job terminar com status `Cancelled` ou com dump.
 
 ---
 
+### Job 4 — ZEWM_C360_WATCHDOG (DDI-02)
+
+| Atributo | Valor |
+|----------|-------|
+| Job Name | `ZEWM_C360_WATCHDOG` |
+| Programa | `ZEWM_C360_WATCHDOG_JOB` |
+| Periodicidade | A cada **5 minutos** |
+| Usuário técnico | `ZEWM_C360_SVC` |
+| Classe de job | `C` (baixa prioridade) |
+
+**Problema resolvido (DDI-02)**: se o job de snapshot falhar abruptamente (dump, kill, timeout
+de workprocess) sem chamar `RELEASE_LOCK`, o `LOCK_FLAG` fica em 'X' para sempre e o
+processo fica bloqueado indefinidamente. Sem watchdog, o único remédio é intervenção manual
+no banco de dados.
+
+**Funcionamento**:
+```abap
+"-- Selecionar todos os locks que excedem o timeout configurado
+SELECT * FROM ztewm_c360_snap_ctl
+  INTO TABLE @DATA(lt_stale)
+  WHERE lock_flag   = abap_true
+    AND lock_since  < @cl_abap_tstmp=>subtract(
+          tstmp = cl_abap_tstmp=>utclong2tstmp( utc_long_current_utclong )
+          secs  = lv_timeout_secs ).
+
+"-- Para cada lock abandonado:
+LOOP AT lt_stale INTO DATA(ls_stale).
+  "-- Registrar alerta em ZTEWM_C360_ACTLOG
+  "-- Limpar lock
+  UPDATE ztewm_c360_snap_ctl
+    SET lock_flag  = abap_false
+        lock_by    = ''
+        lock_since = '00000000000000'
+        status_code = 'ERROR'
+        error_msg  = |Watchdog: lock abandonado por { ls_stale-lock_by } limpo em { sy-datum }|
+    WHERE lgnum        = ls_stale-lgnum
+      AND snap_type    = ls_stale-snap_type
+      AND process_type = ls_stale-process_type.
+  COMMIT WORK.
+ENDLOOP.
+```
+
+**Parâmetros configuráveis** (em `ZTEWM_C360_CUST`):
+
+| PARAM_KEY | Valor padrão | Descrição |
+|-----------|-------------|-----------|
+| `WATCHDOG_TIMEOUT_MIN` | `30` | Minutos sem `RELEASE_LOCK` antes de limpar o lock |
+| `WATCHDOG_ALERT_EMAIL` | `DL_EWM_C360_SUPPORT` | Grupo de e-mail para alertas |
+
+**Critérios de aceite**:
+- Lock com `LOCK_SINCE` > 30 min é limpo automaticamente
+- Alerta registrado em `ZTEWM_C360_ACTLOG` com `ACTION_ID = 'WATCHDOG_CLEAN'`
+- E-mail enviado ao grupo configurado quando lock for limpo
+- Watchdog **não** limpa locks com `STATUS_CODE = 'RUNNING'` e `LOCK_SINCE` recente
+
+---
+
 ## Configuração via SM36 (passo a passo)
 
 ### Criar job SNAPSHOT_DELTA
