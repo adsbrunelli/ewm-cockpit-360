@@ -104,15 +104,27 @@ SE24 → ZCL_EWM_C360_LOG → implementa ZIF_EWM_C360_LOG_WRITER: Sim
 
 **Pré-condição**: Wave 5 importada  
 **Objetos**:
+- `ZCL_EWM_C360_FACTORY` — factory de componentes (instanciar antes das engines)
 - `ZCL_EWM_C360_KPI_ENGINE`
 - `ZCL_EWM_C360_EXCEPTION_ENGINE`
 - `ZCL_EWM_C360_REPROCESSOR`
 - `ZCL_EWM_C360_SNAPSHOT_RUNNER`
 - `ZCL_EWM_C360_ACTION_DISPATCHER`
+- `ZCL_EWM_C360_DEPENDENCY_CHECK` — validação de pré-requisitos de deploy (DEP-01)
+- `ZEWM_C360_WATCHDOG_JOB` — programa do job de watchdog de lock (DDI-02)
 
 **Validação pós-import**:
 ```
+SE24 → ZCL_EWM_C360_FACTORY → sintaxe OK, métodos GET_* visíveis
 SE24 → ZCL_EWM_C360_KPI_ENGINE → sintaxe OK (ativar e verificar)
+SE38 → ZEWM_C360_WATCHDOG_JOB → sintaxe OK
+```
+
+**Passo obrigatório pós-import** (DEP-01):
+```
+SE38 → ZEWM_C360_VALIDATE_DEPS → Executar
+  Resultado esperado: "Todas as dependências validadas — OK para prosseguir"
+  Se erros: NÃO importar Wave 7 — resolver dependências pendentes primeiro
 ```
 
 ---
@@ -135,12 +147,19 @@ ADT → Preview de dados → retorna linhas sem DUMP
 
 ### Wave 8 — CDS Access Control (DCL)
 
-**Pré-condição**: Wave 7 importada, Objetos de autorização (Wave 3) ativos  
-**Objetos**:
-- `ZCDS_EWM_C360_HDR` (DCL para ZI_EWM_C360_HDR)
-- `ZCDS_EWM_C360_EXC` (DCL para ZI_EWM_C360_EXC)
-- `ZCDS_EWM_C360_KPI` (DCL para ZI_EWM_C360_KPI)
-- `ZCDS_EWM_C360_ACTLOG` (DCL para ZI_EWM_C360_ACTLOG)
+**Pré-condição**: Wave 7 (ZI_ views) e Wave 3 (authorization objects Z_EWM_C360*) ativos  
+**Objetos** — ZI_ views (interface):
+- `ZI_EWM_C360_HDR` (role: ZI_EWM_C360_HDR)
+- `ZI_EWM_C360_ITEM` (role: ZI_EWM_C360_ITEM)
+- `ZI_EWM_C360_EXC` (role: ZI_EWM_C360_EXC)
+- `ZI_EWM_C360_KPI` (role: ZI_EWM_C360_KPI)
+- `ZI_EWM_C360_ACTLOG` (role: ZI_EWM_C360_ACTLOG — usa Z_EWM_C360L)
+
+**Objetos** — ZC_ views (consumption), importar após ZC_ views (Wave 9):
+- `ZC_EWM_C360_INBOUND` (role: ZC_EWM_C360_INBOUND — PROCESS='INBOUND')
+- `ZC_EWM_C360_OUTBOUND` (role: ZC_EWM_C360_OUTBOUND — PROCESS='OUTBOUND')
+- `ZC_EWM_C360_HU` (role: ZC_EWM_C360_HU — PROCESS='HU')
+- `ZC_EWM_C360_WT` (role: ZC_EWM_C360_WT — PROCESS='WT')
 
 **Validação pós-import**:
 ```

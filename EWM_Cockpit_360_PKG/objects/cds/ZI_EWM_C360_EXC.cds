@@ -52,8 +52,11 @@ define view entity ZI_EWM_C360_EXC
         else 0
       end as SeverityCriticality,
 
-      /* SLA expirado */
-      case when Exc.sla_due_at < $session.system_date and Exc.resolved_flag = ''
+      /* SLA expirado — compara TIMESTAMP vs TIMESTAMP atual (ADR-010)
+         tstmp_current_utctimestamp() disponível desde NW 7.50             */
+      case when Exc.sla_due_at <> cast( '' as zdewm_c360_timestamp )
+             and Exc.sla_due_at < tstmp_current_utctimestamp( )
+             and Exc.resolved_flag = abap_false
         then abap_true
         else abap_false
       end as SlaExpired,
