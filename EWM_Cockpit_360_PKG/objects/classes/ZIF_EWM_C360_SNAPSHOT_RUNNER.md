@@ -33,14 +33,39 @@ TYPES:
 ## Métodos
 
 ### ACQUIRE_LOCK
-Tenta adquirir lock em ZTEWM_C360_SNAP_CTL. Retorna FALSE se já bloqueado.
+Tenta adquirir lock em ZTEWM_C360_SNAP_CTL de forma **atômica**.
+Retorna `abap_true` se o lock foi adquirido, `abap_false` se já estava bloqueado.
+
+O método usa UPDATE condicional (WHERE LOCK_FLAG = '') em vez de SELECT + UPDATE separados,
+eliminando a race condition onde dois processos paralelos poderiam ambos ler '' e ambos gravar 'X'.
+O banco de dados serializa a escrita; `sy-dbcnt = 1` confirma que este processo foi o único a colocar o lock.
 
 ```abap
 METHODS acquire_lock
   IMPORTING
-    is_request       TYPE ty_snap_request
+    is_request        TYPE ty_snap_request
   RETURNING
-    VALUE(rv_locked) TYPE abap_bool.
+    VALUE(rv_acquired) TYPE abap_bool.
+```
+
+**Implementação de referência (ZCL_EWM_C360_SNAPSHOT_RUNNER):**
+```abap
+METHOD zif_ewm_c360_snapshot_runner~acquire_lock.
+  DATA lv_now TYPE timestamp.
+  GET TIME STAMP FIELD lv_now.
+
+  UPDATE ztewm_c360_snap_ctl
+    SET lock_flag  = abap_true
+        lock_by    = sy-uname
+        lock_since = lv_now
+    WHERE mandt        = sy-mandt
+      AND lgnum        = is_request-lgnum
+      AND snap_type    = is_request-snap_type
+      AND process_type = is_request-process_type
+      AND lock_flag    = abap_false.   " condição atômica
+
+  rv_acquired = xsdbool( sy-dbcnt = 1 ).
+ENDMETHOD.
 ```
 
 ### RELEASE_LOCK
@@ -117,9 +142,9 @@ INTERFACE zif_ewm_c360_snapshot_runner
   METHODS:
     acquire_lock
       IMPORTING
-        is_request       TYPE ty_snap_request
+        is_request         TYPE ty_snap_request
       RETURNING
-        VALUE(rv_locked) TYPE abap_bool,
+        VALUE(rv_acquired) TYPE abap_bool,
 
     release_lock
       IMPORTING
