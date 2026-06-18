@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth *)",
+      "Bash(Get-ChildItem -Recurse -Depth 3 -Force)",
+      "Bash(Select-Object FullName, Mode)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(gh --version)",
+      "PowerShell(gh --version)",
+      "PowerShell(gh auth status)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\", \"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\", \"User\"\\); gh --version)"
+    ]
+  }
+}
