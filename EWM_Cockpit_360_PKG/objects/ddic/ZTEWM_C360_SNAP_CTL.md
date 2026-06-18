@@ -32,7 +32,9 @@ Especificado
 | RECORDS_WRITTEN | ZDEWM_C360_E_COUNTER | INT4 | 4 | | | Registros Gravados |
 | DELTA_FROM_TS | TIMESTAMP | DEC | 15 | | | Timestamp Inicial do Delta |
 | DELTA_TO_TS | TIMESTAMP | DEC | 15 | | | Timestamp Final do Delta |
-| LOCK_FLAG | ZDEWM_C360_E_FLAG | CHAR | 1 | | | Snapshot em Execução (lock) |
+| LOCK_FLAG | ZDEWM_C360_E_FLAG | CHAR | 1 | | | Snapshot em Execução (lock) — 'X' = bloqueado |
+| LOCK_BY | UNAME | CHAR | 12 | | | Usuário/Job que detém o lock (preenchido junto com LOCK_FLAG) |
+| LOCK_SINCE | TIMESTAMP | DEC | 15 | | | Timestamp UTC de aquisição do lock |
 | ERROR_MSG | ZDEWM_C360_E_MSG_TEXT | CHAR | 255 | | | Mensagem de Erro |
 | JOB_NAME | CHAR | CHAR | 32 | | | Nome do Job SM36 |
 | EXEC_USER | UNAME | CHAR | 12 | | X | Usuário/Job Executor |
@@ -51,10 +53,46 @@ Especificado
 
 ## Regras de controle
 
-- LOCK_FLAG = 'X' impede nova execução concorrente para mesma chave.
-- Job deve gravar STATUS_CODE = 'RUNNING' e LOCK_FLAG = 'X' antes de iniciar.
-- Em caso de erro, gravar STATUS_CODE = 'ERROR', limpar LOCK_FLAG e registrar ERROR_MSG.
+### Lock atômico (DDI-01 — padrão obrigatório)
+
+O lock **não pode** ser implementado como SELECT + UPDATE separados (check-then-act), pois dois processos paralelos podem ambos ler LOCK_FLAG = '' e ambos gravar 'X', causando dupla execução.
+
+O padrão correto usa UPDATE condicional — o banco de dados serializa escritas concorrentes na mesma linha; apenas um UPDATE encontrará WHERE LOCK_FLAG = '' verdadeiro:
+
+```abap
+" CORRETO — UPDATE atômico com condição na chave
+UPDATE ztewm_c360_snap_ctl
+  SET lock_flag  = 'X'
+      lock_by    = sy-uname
+      lock_since = <timestamp_utc>
+  WHERE mandt        = sy-mandt
+    AND lgnum        = is_request-lgnum
+    AND snap_type    = is_request-snap_type
+    AND process_type = is_request-process_type
+    AND lock_flag    = ''.   " <-- condição que torna a operação atômica
+
+rv_acquired = xsdbool( sy-dbcnt = 1 ).
+" sy-dbcnt = 1 → lock adquirido
+" sy-dbcnt = 0 → outro processo já havia bloqueado
+```
+
+```abap
+" ERRADO — race condition: dois processos leem '' antes de qualquer UPDATE
+SELECT SINGLE lock_flag INTO lv_flag
+  FROM ztewm_c360_snap_ctl
+  WHERE lgnum = ... AND snap_type = ... AND process_type = ...
+IF lv_flag = ''. " <-- janela de concorrência aqui
+  UPDATE ... SET lock_flag = 'X'.
+ENDIF.
+```
+
+### Regras adicionais
+
+- Job deve gravar STATUS_CODE = 'RUNNING' e LOCK_FLAG = 'X' antes de iniciar, via padrão atômico acima.
+- Em caso de erro, gravar STATUS_CODE = 'ERROR', limpar LOCK_FLAG/LOCK_BY/LOCK_SINCE e registrar ERROR_MSG.
+- RELEASE_LOCK deve ser chamado em qualquer desvio — inclusive dentro de CATCH de ZCX_EWM_C360_SNAPSHOT.
 - DELTA_FROM_TS = DELTA_TO_TS do snapshot anterior bem-sucedido.
+- Lock abandonado (LOCK_FLAG = 'X' há mais de N minutos sem STATUS = 'RUNNING' ativo) deve ser limpo por job de watchdog — ver RUNBOOK_SNAPSHOT.
 
 ## Dependências
 
